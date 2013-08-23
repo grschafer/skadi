@@ -1,36 +1,125 @@
 <html>
   <head>
     <style>
-      body { margin: 0; }
+      /*body { margin: 0; }*/
+      .strike { text-decoration: line-through; }
     </style>
   </head>
   <body>
-    <canvas id="canvas" width="900" height="900"></canvas>
+    <h3>Purpose</h3>
+    <p>To provide code (scale/offset factors) for converting from in-game world coordinates to image coordinates</p>
+    <canvas id="canvas" width="600" height="600"></canvas>
+    <br />
+    <input type='button' name='reset' size='65' id='resetbtn' value='Reset to Step 2' disabled/> | 
     <input type='file' name='img' size='65' id='uploadimage' />
+    <div>
+      <h3>Instructions</h3>
+      <ul>
+        <li id="step1">1. Select a Dota2 map image file on your computer</li>
+        <li id="step2">2. Left-click on the Radiant ancient</li>
+        <li id="step3">3. Left-click on the Dire ancient (towers will be drawn, click Reset if they look wrong, otherwise continue)</li>
+        <li id="step4">4. Use the provided code or given offset/scale values for converting from World coordinates to Image coordinates</li>
+      </ul>
+      <table>
+      <tr><td>Offset X: <span class="offset_x"></span></td></tr>
+      <tr><td>Offset Y: <span class="offset_y"></span></td></tr>
+      <tr><td>Scale X: <span class="scale_x"></span></td></tr>
+      <tr><td>Scale Y: <span class="scale_y"></span></td></tr>
+      </table>
+      <pre>
+def imgCoordFromWorld(x,y):
+    return (8576.0 + x) * <span class="scale_x"></span> + <span class="offset_x"></span>, (8192.0 - y) * <span class="scale_y"></span> + <span class="offset_y"></span>
+      </pre>
+      <h3>Example Use</h3>
+      <pre>
+ancient = world.find_by_dt('DT_DOTA_BaseNPC_Fort')[1]
+print "entity name: {0}".format(ancient[(u'DT_BaseEntity', u'm_iName')])
+# entity name: dota_badguys_fort
+
+print "cellX:{0}, cellY:{1}, vecOrigin:{2}".format(ancient[(u'DT_DOTA_BaseNPC', u'm_cellX')],
+                                                   ancient[(u'DT_DOTA_BaseNPC', u'm_cellY')],
+                                                   ancient[(u'DT_DOTA_BaseNPC', u'm_vecOrigin')])
+# cellX:171, cellY:167, vecOrigin:(24.0, 8.0)
+
+worldCoords = coordFromCell(ancient)
+print "worldCoords:{0}".format(worldCoords)
+# worldCoords:(5528.0, 5000.0)
+
+imgCoords = imgCoordFromWorld(*worldCoords)
+print "imgCoords:{0}".format(imgCoords)
+# imgCoords:(<span id="example_answer">ANSWER WILL SHOW HERE WHEN YOU FINISH STEP 3</span>)
+      </pre>
+    </div>
   </body>
   <script type="text/javascript">
     var dots = [];
-    var ctx = document.getElementById('canvas').getContext('2d');
-    ctx.fillStyle = "rgba(255,0,0,0.7)";
+    var img = new Image();
+    var imgWidth, imgHeight;
+    var upscale = 1.0;
+    var canvas = document.getElementById('canvas');
+    var ctx = canvas.getContext('2d');
     
+
+    // extending the DOM -- eek! just want to try it
+    Element.prototype.addClass = function(cls) {
+      this.className = this.className + " " + cls;
+    }
+    Element.prototype.removeClass = function(cls) {
+      this.className = this.className.replace(new RegExp(cls, 'g'), "");
+    }
+    var forEach = Array.prototype.forEach;
+
+    function resetText() {
+      document.getElementById("step2").removeClass("strike");
+      document.getElementById("step3").removeClass("strike");
+      ["offset_x", "offset_y", "scale_x", "scale_y"].forEach(function (attr) {
+        forEach.call(document.getElementsByClassName(attr), function(elem) {
+          elem.innerText = "";
+        });
+      });
+      document.getElementById("example_answer").innerText = "ANSWER WILL SHOW HERE WHEN YOU FINISH STEP 3";
+      dots = [];
+    }
+    function reset() {
+      ctx.clearRect(0,0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, imgWidth, imgHeight);
+      resetText();
+    }
+
     function addImage(ev) {
+      resetText();
       console.log(ev);
-      var img = new Image(),
-        f = document.getElementById("uploadimage").files[0],
+      var f = document.getElementById("uploadimage").files[0],
         url = window.URL || window.webkitURL,
         src = url.createObjectURL(f);
 
       img.src = src;
       img.onload = function() {
-        // scaling logic
-        ctx.drawImage(img, 0, 0, img.width, img.height);
+        // scale down too-large images
+        imgWidth = img.width;
+        imgHeight = img.height;
+        if (img.width > canvas.width) {
+          upscale = img.width / canvas.width;
+          imgWidth = canvas.width;
+          imgHeight *= canvas.width / img.width;
+        }
+        ctx.drawImage(img, 0, 0, imgWidth, imgHeight);
         url.revokeObjectURL(src);
+        
+        document.getElementById("step1").addClass("strike");
+        // allow marking of radiant/dire ancients by user
+        document.getElementById("canvas").addEventListener("click", drawDot, false);
+        // allow use of Reset button
+        document.getElementById("resetbtn").removeAttribute("disabled");
       }
     }
     function drawDot(ev) {
-      ctx.fillRect(ev.clientX - 4, ev.clientY - 4, 8, 8);
-      dots.push({x:ev.clientX, y:ev.clientY});
+      ctx.fillStyle = "rgba(255,255,255,1.0)";
+      ctx.fillRect(ev.offsetX - 5, ev.offsetY - 6, 8, 8);
+      dots.push({x:ev.offsetX, y:ev.offsetY});
+      document.getElementById("step2").addClass("strike");
       if (dots.length == 2) {
+        document.getElementById("step3").addClass("strike");
         document.getElementById("canvas").removeEventListener("mousedown", drawDot, false);
         computeScaleOffset();
       }
@@ -39,70 +128,66 @@
     var World = {};
     World.width = 9216.0 - -8576.0;
     World.height = 8192.0 - -7680.0;
-    World.shiftOrigin = function(x,y) {
-      return {x: x + 8576.0, y: 8192.0 - y};
+    World.shiftOrigin = function(x,y, scale) {
+      scale = scale || 1.0;
+      return {x: x * scale + 8576.0, y: 8192.0 - y * scale};
     }
-    World.rAncient = World.shiftOrigin([-6649.0, -6154.0]);
-    World.dAncient = World.shiftOrigin([7312.0, 6345.0]);
-    World.toImgCoords = function(x,y) {
+    World.rAncient = World.shiftOrigin(-5888.0, -5376.0);
+    World.dAncient = World.shiftOrigin(5528.0, 5000.0);
+    World.toImgCoords = function(x,y, scale) {
       // TODO: throw error if scale/offset values undefined
-      var t = this.shiftOrigin(x,y);
-      return {x: t['x'] * this.scale_x + this.offset_x, y: t['y'] * this.scale_y + this.offset_y};
+      var t = World.shiftOrigin(x,y, scale);
+      return {x: t['x'] * World.scale_x * scale + World.offset_x, y: t['y'] * World.scale_y * scale + World.offset_y};
     }
     World.fromImgCoords = function(x,y) {
       // TODO
     }
     World.computeScaleOffset = function(rAncient, dAncient) {
-      this.scale_x = Math.abs((rAncient['x'] - dAncient['x']) / (this.rAncient['x'] - this.dAncient['y']));
-      this.scale_y = Math.abs((rAncient['y'] - dAncient['y']) / (this.rAncient['y'] - this.dAncient['y']));
-      console.log('scale: ' + this.scale_x + ' ' + this.scale_y);
-      this.offset_x = rAncient['x'] - this.rAncient['x'] * this.scale_x;
-      this.offset_y = rAncient['y'] - this.rAncient['y'] * this.scale_y;
+      World.scale_x = Math.abs((rAncient['x'] - dAncient['x']) / (World.rAncient['x'] - World.dAncient['x']));
+      World.scale_y = Math.abs((rAncient['y'] - dAncient['y']) / (World.rAncient['y'] - World.dAncient['y']));
+      console.log('scale: ' + World.scale_x + ' ' + World.scale_y);
+      World.offset_x = rAncient['x'] - World.rAncient['x'] * World.scale_x;
+      World.offset_y = rAncient['y'] - World.rAncient['y'] * World.scale_y;
+      console.log('offset: ' + World.offset_x + ' ' + World.offset_y);
     }
 
-    // TODO: fewer variables with better names
-    var world_range_x = 9216.0 - -8576.0;
-    var world_range_y = 8192.0 - -7680.0;
-    var world_origin_x = 8576.0;
-    var world_origin_y = 8192.0;
-    var topleft_x = -8576.0;
-    var topleft_y = 8192.0;
-    var rad_ancient_x = -6649.0;
-    var rad_ancient_y = -6154.0;
-    var scale_x, scale_y, offset_x, offset_y;
     function computeScaleOffset() {
-      var world_dx = 7312.0 - -6649.0;
-      var world_dy = 6345.0 - -6154.0;
-      var img_dx = Math.abs(dots[0]['x'] - dots[1]['x']);
-      var img_dy = Math.abs(dots[0]['y'] - dots[1]['y']);
-      scale_x = img_dx / world_dx;
-      scale_y = img_dy / world_dy;
+      World.computeScaleOffset(dots[0], dots[1]);
+      var topleft = World.toImgCoords(-8576.0, 8192.0, 1.0);
+      var botright = World.toImgCoords(9216.0, -7680.0, 1.0);
 
-      offset_x = dots[0]['x'] - mvWorldOrigin(topleft_x) * scale_x;
-      offset_y = dots[0]['y'] - mvWorldOrigin(topleft_y) * scale_y;
-      var origin = worldToImg(-world_origin_x, -world_origin_y);
-      var botright = worldToImg(world_range_x - world_origin_x, world_range_y - world_origin_y);
-      ctx.fillStyle = "rgba(0,0,255,0.5)";
-      ctx.fillRect(origin['x'], origin['y'], botright['x'], botright['y']);
+      ctx.fillStyle = "rgba(0,255,0,0.3)";
+      ctx.fillRect(topleft['x'], topleft['y'], botright['x'] - topleft['x'], botright['y'] - topleft['y']);
+
+      ["offset_x", "offset_y", "scale_x", "scale_y"].forEach(function (attr) {
+        forEach.call(document.getElementsByClassName(attr), function(elem) {
+          // mult by upscale to map back into fullsize image coordinates
+          elem.innerText = World[attr] * upscale;
+        });
+      });
+      
+      // scale by upscale to convert back into fullsize image coordinates
+      var exAns = World.toImgCoords(5528.0, 5000.0, upscale);
+      document.getElementById("example_answer").innerText = exAns['x'] + "," + exAns['y'];
+
       drawTowers();
-    }
-    function mvWorldOrigin(x,y) {
-      return {x: x + world_origin_x, y: world_origin_y - y};
-    }
-    function worldToImg(x,y) {
-      return {x: mvWorldOrigin(x) * scale_x + offset_x, y: mvWorldOrigin(y) * scale_y + offset_y};
     }
     var towers = [[-3873.0, -6112.0], [-5392.0, -5168.0], [-4608.0, -4096.0], [-5680.0, -4880.0], [-6624.0, -3328.0], [-6096.0, 1840.0], [-6144.0, -832.0], [-1504.0, -1376.0], [-3512.0, -2776.0], [-560.0, -6096.0], [4928.0, -6080.0], [6276.0, 2984.0], [5280.0, 4432.0], [4960.0, 4784.0], [3504.0, 5776.0], [-4736.0, 6016.0], [0.0, 6016.0], [2496.0, 2112.0], [1024.0, 320.0], [6080.0, -1664.0], [6272.0, 256.0], [4224.0, 3712.0]];
     function drawTowers() {
-      ctx.fillStyle = "pink";
+      ctx.fillStyle = "rgba(0,0,255,0.8)";
       var pos;
       towers.forEach(function (tower) {
-        pos = worldToImg.apply(this, tower);
-        ctx.fillRect(pos['x'], pos['y'], 8, 8);
+        pos = World.toImgCoords(tower[0], tower[1], 1.0);
+        console.log('mapped ' + tower[0] + ',' + tower[1] + ' to ' + pos['x'] + ',' + pos['y']);
+        ctx.fillRect(pos['x'] - 4, pos['y'] - 4, 8, 8);
       });
     }
 
     document.getElementById("uploadimage").addEventListener("change", addImage, false);
-    document.getElementById("canvas").addEventListener("mousedown", drawDot, false);
+    document.getElementById("resetbtn").addEventListener("click", reset, false);
+    //document.getElementById("canvas").addEventListener("click", tracePos, false);
+    //function tracePos(ev) {
+    //  console.log(ev);
+    //}
   </script>
 </html>
