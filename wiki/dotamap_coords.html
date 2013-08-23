@@ -1,0 +1,108 @@
+<html>
+  <head>
+    <style>
+      body { margin: 0; }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas" width="900" height="900"></canvas>
+    <input type='file' name='img' size='65' id='uploadimage' />
+  </body>
+  <script type="text/javascript">
+    var dots = [];
+    var ctx = document.getElementById('canvas').getContext('2d');
+    ctx.fillStyle = "rgba(255,0,0,0.7)";
+    
+    function addImage(ev) {
+      console.log(ev);
+      var img = new Image(),
+        f = document.getElementById("uploadimage").files[0],
+        url = window.URL || window.webkitURL,
+        src = url.createObjectURL(f);
+
+      img.src = src;
+      img.onload = function() {
+        // scaling logic
+        ctx.drawImage(img, 0, 0, img.width, img.height);
+        url.revokeObjectURL(src);
+      }
+    }
+    function drawDot(ev) {
+      ctx.fillRect(ev.clientX - 4, ev.clientY - 4, 8, 8);
+      dots.push({x:ev.clientX, y:ev.clientY});
+      if (dots.length == 2) {
+        document.getElementById("canvas").removeEventListener("mousedown", drawDot, false);
+        computeScaleOffset();
+      }
+    }
+
+    var World = {};
+    World.width = 9216.0 - -8576.0;
+    World.height = 8192.0 - -7680.0;
+    World.shiftOrigin = function(x,y) {
+      return {x: x + 8576.0, y: 8192.0 - y};
+    }
+    World.rAncient = World.shiftOrigin([-6649.0, -6154.0]);
+    World.dAncient = World.shiftOrigin([7312.0, 6345.0]);
+    World.toImgCoords = function(x,y) {
+      // TODO: throw error if scale/offset values undefined
+      var t = this.shiftOrigin(x,y);
+      return {x: t['x'] * this.scale_x + this.offset_x, y: t['y'] * this.scale_y + this.offset_y};
+    }
+    World.fromImgCoords = function(x,y) {
+      // TODO
+    }
+    World.computeScaleOffset = function(rAncient, dAncient) {
+      this.scale_x = Math.abs((rAncient['x'] - dAncient['x']) / (this.rAncient['x'] - this.dAncient['y']));
+      this.scale_y = Math.abs((rAncient['y'] - dAncient['y']) / (this.rAncient['y'] - this.dAncient['y']));
+      console.log('scale: ' + this.scale_x + ' ' + this.scale_y);
+      this.offset_x = rAncient['x'] - this.rAncient['x'] * this.scale_x;
+      this.offset_y = rAncient['y'] - this.rAncient['y'] * this.scale_y;
+    }
+
+    // TODO: fewer variables with better names
+    var world_range_x = 9216.0 - -8576.0;
+    var world_range_y = 8192.0 - -7680.0;
+    var world_origin_x = 8576.0;
+    var world_origin_y = 8192.0;
+    var topleft_x = -8576.0;
+    var topleft_y = 8192.0;
+    var rad_ancient_x = -6649.0;
+    var rad_ancient_y = -6154.0;
+    var scale_x, scale_y, offset_x, offset_y;
+    function computeScaleOffset() {
+      var world_dx = 7312.0 - -6649.0;
+      var world_dy = 6345.0 - -6154.0;
+      var img_dx = Math.abs(dots[0]['x'] - dots[1]['x']);
+      var img_dy = Math.abs(dots[0]['y'] - dots[1]['y']);
+      scale_x = img_dx / world_dx;
+      scale_y = img_dy / world_dy;
+
+      offset_x = dots[0]['x'] - mvWorldOrigin(topleft_x) * scale_x;
+      offset_y = dots[0]['y'] - mvWorldOrigin(topleft_y) * scale_y;
+      var origin = worldToImg(-world_origin_x, -world_origin_y);
+      var botright = worldToImg(world_range_x - world_origin_x, world_range_y - world_origin_y);
+      ctx.fillStyle = "rgba(0,0,255,0.5)";
+      ctx.fillRect(origin['x'], origin['y'], botright['x'], botright['y']);
+      drawTowers();
+    }
+    function mvWorldOrigin(x,y) {
+      return {x: x + world_origin_x, y: world_origin_y - y};
+    }
+    function worldToImg(x,y) {
+      return {x: mvWorldOrigin(x) * scale_x + offset_x, y: mvWorldOrigin(y) * scale_y + offset_y};
+    }
+    var towers = [[-3873.0, -6112.0], [-5392.0, -5168.0], [-4608.0, -4096.0], [-5680.0, -4880.0], [-6624.0, -3328.0], [-6096.0, 1840.0], [-6144.0, -832.0], [-1504.0, -1376.0], [-3512.0, -2776.0], [-560.0, -6096.0], [4928.0, -6080.0], [6276.0, 2984.0], [5280.0, 4432.0], [4960.0, 4784.0], [3504.0, 5776.0], [-4736.0, 6016.0], [0.0, 6016.0], [2496.0, 2112.0], [1024.0, 320.0], [6080.0, -1664.0], [6272.0, 256.0], [4224.0, 3712.0]];
+    function drawTowers() {
+      ctx.fillStyle = "pink";
+      var pos;
+      towers.forEach(function (tower) {
+        pos = worldToImg.apply(this, tower);
+        ctx.fillRect(pos['x'], pos['y'], 8, 8);
+      });
+    }
+
+    document.getElementById("uploadimage").addEventListener("change", addImage, false);
+    document.getElementById("canvas").addEventListener("mousedown", drawDot, false);
+  </script>
+</html>
