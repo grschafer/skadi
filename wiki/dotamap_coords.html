@@ -3,6 +3,16 @@
     <style>
       /*body { margin: 0; }*/
       .strike { text-decoration: line-through; }
+      pre {
+        background-color: #f8f8f8;
+        border: 1px solid #ddd;
+        font-size: 13px;
+        line-height: 19px;
+        overflow: auto;
+        padding: 6px 10px;
+        border-radius: 3px;
+      }
+	  canvas { position: relative; }
     </style>
   </head>
   <body>
@@ -14,21 +24,21 @@
     <input type='file' name='img' size='65' id='uploadimage' />
     <div>
       <h3>Instructions</h3>
-      <ul>
-        <li id="step1">1. Select a Dota2 map image file on your computer</li>
-        <li id="step2">2. Left-click on the Radiant ancient</li>
-        <li id="step3">3. Left-click on the Dire ancient (towers will be drawn, click Reset if they look wrong, otherwise continue)</li>
-        <li id="step4">4. Use the provided code or given offset/scale values for converting from World coordinates to Image coordinates</li>
-      </ul>
+      <ol>
+        <li id="step1">Select a Dota2 map image file on your computer or paste a URL</li>
+        <li id="step2">Left-click on the Radiant ancient</li>
+        <li id="step3">Left-click on the Dire ancient (towers will be drawn, click Reset if they look wrong, otherwise continue)</li>
+        <li id="step4">Use the provided code or given offset/scale values for converting from World coordinates to Image coordinates</li>
+      </ol>
       <table>
-      <tr><td>Offset X: <span class="offset_x"></span></td></tr>
-      <tr><td>Offset Y: <span class="offset_y"></span></td></tr>
-      <tr><td>Scale X: <span class="scale_x"></span></td></tr>
-      <tr><td>Scale Y: <span class="scale_y"></span></td></tr>
+      <tr><td>Offset X: <span class="offset_x">FINISH STEP 3</span></td></tr>
+      <tr><td>Offset Y: <span class="offset_y">FINISH STEP 3</span></td></tr>
+      <tr><td>Scale X: <span class="scale_x">FINISH STEP 3</span></td></tr>
+      <tr><td>Scale Y: <span class="scale_y">FINISH STEP 3</span></td></tr>
       </table>
       <pre>
 def imgCoordFromWorld(x,y):
-    return (8576.0 + x) * <span class="scale_x"></span> + <span class="offset_x"></span>, (8192.0 - y) * <span class="scale_y"></span> + <span class="offset_y"></span>
+    return (8576.0 + x) * <span class="scale_x">FINISH STEP 3</span> + <span class="offset_x">FINISH STEP 3</span>, (8192.0 - y) * <span class="scale_y">FINISH STEP 3</span> + <span class="offset_y">FINISH STEP 3</span>
       </pre>
       <h3>Example Use</h3>
       <pre>
@@ -74,10 +84,10 @@ print "imgCoords:{0}".format(imgCoords)
       document.getElementById("step3").removeClass("strike");
       ["offset_x", "offset_y", "scale_x", "scale_y"].forEach(function (attr) {
         forEach.call(document.getElementsByClassName(attr), function(elem) {
-          elem.innerText = "";
+          elem.textContent = "FINISH STEP 3";
         });
       });
-      document.getElementById("example_answer").innerText = "ANSWER WILL SHOW HERE WHEN YOU FINISH STEP 3";
+      document.getElementById("example_answer").textContent = "ANSWER WILL SHOW HERE WHEN YOU FINISH STEP 3";
       dots = [];
     }
     function reset() {
@@ -114,11 +124,17 @@ print "imgCoords:{0}".format(imgCoords)
       }
     }
     function drawDot(ev) {
+	  var click_x = ev.pageX - canvas.offsetLeft;
+	  var click_y = ev.pageY - canvas.offsetTop;
+	  
       ctx.fillStyle = "rgba(255,255,255,1.0)";
-      ctx.fillRect(ev.offsetX - 5, ev.offsetY - 6, 8, 8);
-      dots.push({x:ev.offsetX, y:ev.offsetY});
+      ctx.fillRect(click_x - 5, click_y - 6, 8, 8);
+      // mult by upscale to map back into fullsize image coordinates
+      dots.push({x:click_x * upscale, y:click_y * upscale});
+	  console.log('click pos: ' + click_x + ',' + click_y);
       document.getElementById("step2").addClass("strike");
       if (dots.length == 2) {
+		console.log(dots);
         document.getElementById("step3").addClass("strike");
         document.getElementById("canvas").removeEventListener("mousedown", drawDot, false);
         computeScaleOffset();
@@ -128,15 +144,18 @@ print "imgCoords:{0}".format(imgCoords)
     var World = {};
     World.width = 9216.0 - -8576.0;
     World.height = 8192.0 - -7680.0;
-    World.shiftOrigin = function(x,y, scale) {
-      scale = scale || 1.0;
-      return {x: x * scale + 8576.0, y: 8192.0 - y * scale};
+    World.shiftOrigin = function(x,y) {
+      return {x: x + 8576.0, y: 8192.0 - y};
     }
     World.rAncient = World.shiftOrigin(-5888.0, -5376.0);
     World.dAncient = World.shiftOrigin(5528.0, 5000.0);
     World.toImgCoords = function(x,y, scale) {
       // TODO: throw error if scale/offset values undefined
-      var t = World.shiftOrigin(x,y, scale);
+      var t = World.shiftOrigin(x,y);
+      return {x: scale * (t['x'] * World.scale_x + World.offset_x), y: scale * (t['y'] * World.scale_y + World.offset_y)};
+    }
+    World.toShrunkImgCoords = function(x,y) {
+      var t = World.shiftOrigin(x,y);
       return {x: t['x'] * World.scale_x * scale + World.offset_x, y: t['y'] * World.scale_y * scale + World.offset_y};
     }
     World.fromImgCoords = function(x,y) {
@@ -153,8 +172,8 @@ print "imgCoords:{0}".format(imgCoords)
 
     function computeScaleOffset() {
       World.computeScaleOffset(dots[0], dots[1]);
-      var topleft = World.toImgCoords(-8576.0, 8192.0, 1.0);
-      var botright = World.toImgCoords(9216.0, -7680.0, 1.0);
+      var topleft = World.toImgCoords(-8576.0, 8192.0, 1.0 / upscale);
+      var botright = World.toImgCoords(9216.0, -7680.0, 1.0 / upscale);
 
       ctx.fillStyle = "rgba(0,255,0,0.3)";
       ctx.fillRect(topleft['x'], topleft['y'], botright['x'] - topleft['x'], botright['y'] - topleft['y']);
@@ -162,13 +181,13 @@ print "imgCoords:{0}".format(imgCoords)
       ["offset_x", "offset_y", "scale_x", "scale_y"].forEach(function (attr) {
         forEach.call(document.getElementsByClassName(attr), function(elem) {
           // mult by upscale to map back into fullsize image coordinates
-          elem.innerText = World[attr] * upscale;
+          elem.textContent = World[attr].toFixed(4);
         });
       });
       
       // scale by upscale to convert back into fullsize image coordinates
-      var exAns = World.toImgCoords(5528.0, 5000.0, upscale);
-      document.getElementById("example_answer").innerText = exAns['x'] + "," + exAns['y'];
+      var exAns = World.toImgCoords(5528.0, 5000.0, 1.0);
+      document.getElementById("example_answer").textContent = exAns['x'].toFixed(3) + "," + exAns['y'].toFixed(3);
 
       drawTowers();
     }
@@ -177,8 +196,8 @@ print "imgCoords:{0}".format(imgCoords)
       ctx.fillStyle = "rgba(0,0,255,0.8)";
       var pos;
       towers.forEach(function (tower) {
-        pos = World.toImgCoords(tower[0], tower[1], 1.0);
-        console.log('mapped ' + tower[0] + ',' + tower[1] + ' to ' + pos['x'] + ',' + pos['y']);
+        pos = World.toImgCoords(tower[0], tower[1], 1.0 / upscale);
+        //console.log('mapped ' + tower[0] + ',' + tower[1] + ' to ' + pos['x'] + ',' + pos['y']);
         ctx.fillRect(pos['x'] - 4, pos['y'] - 4, 8, 8);
       });
     }
